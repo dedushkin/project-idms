@@ -1,0 +1,37 @@
+apiVersion: v1
+entries:
+  kubernetes-operator:
+  - apiVersion: v2
+    appVersion: 0.2.2
+    created: "2026-04-21T15:22:06.244479+04:00"
+    description: NetBird Kubernetes Operator
+    digest: ddc651bf9461c288f83cb1213a490386a74e23d1ac7585252a39c4a6f43b91fe
+    name: kubernetes-operator
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/dedushkin/project-idms/main/helm/charts/kubernetes-operator-0.2.2.tgz
+    version: 0.2.2
+  netbird:
+  - apiVersion: v2
+    appVersion: 0.46.0
+    created: "2026-04-21T15:22:06.246355+04:00"
+    description: NetBird VPN management platform
+    digest: 96a0ff329ec5520612eaf60fd4e407c5136c5806b2c474aea9c5a0073b584339
+    icon: https://images.crunchbase.com/image/upload/c_pad,h_256,w_256,f_auto,q_auto:eco,dpr_1/kuu5tm1wt09ztp6ctlag
+    name: netbird
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/dedushkin/project-idms/main/helm/charts/netbird-1.9.0.tgz
+    version: 1.9.0
+  netbird-operator-config:
+  - apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-04-21T15:22:06.246686+04:00"
+    description: NetBird Operator Configuration
+    digest: d7cfd2824b6de6e5c75a7921462edc6408907419bc960c630a909491222cc577
+    name: netbird-operator-config
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/dedushkin/project-idms/main/helm/charts/netbird-operator-config-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-04-21T15:22:06.241839+04:00"
