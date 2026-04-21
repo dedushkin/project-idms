@@ -3,7 +3,7 @@ entries:
   keycloak-operator:
   - apiVersion: v2
     appVersion: 26.5.5
-    created: "2026-04-21T17:45:33.456509+04:00"
+    created: "2026-04-21T19:50:06.6951+04:00"
     description: Keycloak Operator Helm chart (based on keycloak-k8s-resources 26.5.5)
     digest: 3207f33c62a1f130606b80171bf602b366be469d9ba3103f43f2c3af36e95211
     name: keycloak-operator
@@ -14,7 +14,7 @@ entries:
   kubernetes-operator:
   - apiVersion: v2
     appVersion: 0.2.2
-    created: "2026-04-21T17:45:33.457954+04:00"
+    created: "2026-04-21T19:50:06.696313+04:00"
     description: NetBird Kubernetes Operator
     digest: ddc651bf9461c288f83cb1213a490386a74e23d1ac7585252a39c4a6f43b91fe
     name: kubernetes-operator
@@ -22,10 +22,49 @@ entries:
     urls:
     - https://raw.githubusercontent.com/dedushkin/project-idms/main/helm/charts/kubernetes-operator-0.2.2.tgz
     version: 0.2.2
+  midpoint:
+  - annotations:
+      artifacthub.io/links: |-
+        - name: support
+          url: https://cfi2017.github.io/helm-charts
+    apiVersion: v2
+    appVersion: 4.10-alpine
+    created: "2026-04-21T19:50:06.697489+04:00"
+    dependencies:
+    - alias: postgresql
+      condition: postgresql.enabled
+      name: postgres
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 0.11.5
+    description: MidPoint is an open-source identity governance and administration
+      platform.
+    digest: 4bddb7bebab0fbb8f7046800014ba33b1efbdaa81bc689a27ce6ac8a300c6447
+    home: https://evolveum.com/midpoint/
+    icon: https://evolveum.com/wp-content/uploads/2021/10/midpoint-logo.svg
+    keywords:
+    - midpoint
+    - identity
+    - iam
+    - idm
+    - identity-management
+    - identity-governance
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - email: info@swiss.dev
+      name: cfi2017
+      url: https://github.com/cfi2017
+    name: midpoint
+    sources:
+    - https://hub.docker.com/r/evolveum/midpoint
+    - https://github.com/evolveum/midpoint
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/dedushkin/project-idms/main/helm/charts/midpoint-0.1.3.tgz
+    version: 0.1.3
   netbird:
   - apiVersion: v2
     appVersion: 0.46.0
-    created: "2026-04-21T17:45:33.459041+04:00"
+    created: "2026-04-21T19:50:06.698616+04:00"
     description: NetBird VPN management platform
     digest: 96a0ff329ec5520612eaf60fd4e407c5136c5806b2c474aea9c5a0073b584339
     icon: https://images.crunchbase.com/image/upload/c_pad,h_256,w_256,f_auto,q_auto:eco,dpr_1/kuu5tm1wt09ztp6ctlag
@@ -37,7 +76,7 @@ entries:
   netbird-operator-config:
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-04-21T17:45:33.459311+04:00"
+    created: "2026-04-21T19:50:06.698907+04:00"
     description: NetBird Operator Configuration
     digest: d7cfd2824b6de6e5c75a7921462edc6408907419bc960c630a909491222cc577
     name: netbird-operator-config
@@ -45,4 +84,4 @@ entries:
     urls:
     - https://raw.githubusercontent.com/dedushkin/project-idms/main/helm/charts/netbird-operator-config-0.1.0.tgz
     version: 0.1.0
-generated: "2026-04-21T17:45:33.454114+04:00"
+generated: "2026-04-21T19:50:06.692631+04:00"
