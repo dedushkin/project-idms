@@ -3,9 +3,9 @@ entries:
   keycloak-operator:
   - apiVersion: v2
     appVersion: 26.5.5
-    created: "2026-04-21T19:50:06.6951+04:00"
+    created: "2026-04-28T11:38:55.170783+04:00"
     description: Keycloak Operator Helm chart (based on keycloak-k8s-resources 26.5.5)
-    digest: 3207f33c62a1f130606b80171bf602b366be469d9ba3103f43f2c3af36e95211
+    digest: c12379be6de25517c66565d8dfb033c61398e4dadf45875c6b1f71cf1bf2a933
     name: keycloak-operator
     type: application
     urls:
@@ -14,7 +14,7 @@ entries:
   kubernetes-operator:
   - apiVersion: v2
     appVersion: 0.2.2
-    created: "2026-04-21T19:50:06.696313+04:00"
+    created: "2026-04-28T11:38:55.173277+04:00"
     description: NetBird Kubernetes Operator
     digest: ddc651bf9461c288f83cb1213a490386a74e23d1ac7585252a39c4a6f43b91fe
     name: kubernetes-operator
@@ -29,7 +29,7 @@ entries:
           url: https://cfi2017.github.io/helm-charts
     apiVersion: v2
     appVersion: 4.10-alpine
-    created: "2026-04-21T19:50:06.697489+04:00"
+    created: "2026-04-28T11:38:55.174863+04:00"
     dependencies:
     - alias: postgresql
       condition: postgresql.enabled
@@ -64,7 +64,7 @@ entries:
   netbird:
   - apiVersion: v2
     appVersion: 0.46.0
-    created: "2026-04-21T19:50:06.698616+04:00"
+    created: "2026-04-28T11:38:55.175933+04:00"
     description: NetBird VPN management platform
     digest: 96a0ff329ec5520612eaf60fd4e407c5136c5806b2c474aea9c5a0073b584339
     icon: https://images.crunchbase.com/image/upload/c_pad,h_256,w_256,f_auto,q_auto:eco,dpr_1/kuu5tm1wt09ztp6ctlag
@@ -76,7 +76,7 @@ entries:
   netbird-operator-config:
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-04-21T19:50:06.698907+04:00"
+    created: "2026-04-28T11:38:55.176195+04:00"
     description: NetBird Operator Configuration
     digest: d7cfd2824b6de6e5c75a7921462edc6408907419bc960c630a909491222cc577
     name: netbird-operator-config
@@ -84,4 +84,4 @@ entries:
     urls:
     - https://raw.githubusercontent.com/dedushkin/project-idms/main/helm/charts/netbird-operator-config-0.1.0.tgz
     version: 0.1.0
-generated: "2026-04-21T19:50:06.692631+04:00"
+generated: "2026-04-28T11:38:55.168799+04:00"
