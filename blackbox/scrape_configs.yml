@@ -1,0 +1,81 @@
+scrape_configs:
+  - job_name: idms_2xx
+    scrape_interval: 10s
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - https://nb.lab.dedushk.in
+        - https://keycloak.lab.dedushk.in/realms/lab/
+        - https://midpoint.lab.dedushk.in
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: idms_404
+    scrape_interval: 10s
+    metrics_path: /probe
+    params:
+      module: [http_404]
+    static_configs: 
+      - targets:
+        - https://relay.lab.dedushk.in
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+  - job_name: idms_2xx_internal
+    scrape_interval: 10s
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - https://nb.lab.dedushk.in
+        - https://keycloak.lab.dedushk.in
+        - https://midpoint.lab.dedushk.in
+        - https://grafana.lab.dedushk.in
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 178.105.11.23:9115
+  - job_name: idms_404_internal
+    scrape_interval: 10s
+    metrics_path: /probe
+    params:
+      module: [http_404]
+    static_configs:
+      - targets:
+        - https://relay.lab.dedushk.in
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 178.105.11.23:9115
+  - job_name: idms_dns
+    scrape_interval: 10s
+    metrics_path: /probe
+    params:
+      module: [dns_udp]
+    static_configs:
+      - targets:
+        - "100.94.15.91:53"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 178.105.11.23:9115
