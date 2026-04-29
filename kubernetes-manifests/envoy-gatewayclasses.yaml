@@ -1,0 +1,48 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tigera-gateway
+
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: envoy-proxy-template
+  namespace: tigera-gateway
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        annotations:
+          # пул metalLB, который будет использоваться для получения IP-адреса LoadBalancer
+          metallb.io/address-pool: local-pool
+          # аннотации для NetBird, чтобы он мог автоматически обнаружить и настроить доступ к этому сервису
+          netbird.io/expose: 'true'
+          netbird.io/groups: internal
+          netbird.io/policy: internal-access
+          netbird.io/policy-name: internal-users to internal
+          netbird.io/policy-ports: 80,443
+          netbird.io/policy-protocol: tcp
+          netbird.io/policy-source-groups: internal-users
+        type: LoadBalancer
+        # необходимо чтобы трафик мог попадать на все рабочие ноды
+        externalTrafficPolicy: Cluster
+
+---
+apiVersion: operator.tigera.io/v1
+kind: GatewayAPI
+metadata:
+  name: default
+  namespace: tigera-gateway
+spec:
+  gatewayClasses:
+    - name: envoy-local-gateway-class
+      envoyProxyRef:
+        name: envoy-proxy-template
+        namespace: tigera-gateway
+    - name: envoy-public-gateway-class
+      envoyProxyRef:
+          name: envoy-proxy-template
+          namespace: tigera-gateway
