@@ -1,0 +1,186 @@
+# -- Operator image settings
+image:
+  repository: quay.io/keycloak/keycloak-operator
+  tag: "26.0.7"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# -- Number of operator replicas
+replicaCount: 3
+
+# -- Service account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# -- RBAC
+rbac:
+  create: true
+
+# -- CRDs
+crds:
+  install: true
+
+# -- Operator deployment resources
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity
+affinity: {}
+
+# -- Pod annotations
+podAnnotations: {}
+
+# -- Pod labels
+podLabels: {}
+
+# -- Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+
+# -- Container security context
+securityContext: {}
+
+# -- Operator environment variables
+env: []
+#  - name: JAVA_OPTS_APPEND
+#    value: "-Djgroups.dns.query=keycloak-operator-headless"
+
+# -- Operator service
+service:
+  type: ClusterIP
+  port: 8080
+
+# -- Extra manifests to deploy (list of raw YAML objects)
+extraManifests: 
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: keycloak-internal-cert
+      namespace: keycloak
+    spec:
+      secretName: keycloak-tls-secret
+      duration: 8760h # 365d
+      renewBefore: 360h # 15d
+      commonName: keycloak
+      dnsNames:
+        - '*.keycloak'
+        - '*.keycloak.svc'
+        - '*.keycloak.svc.cluster.local'
+        - '*.keycloak-service.keycloak'
+        - '*.keycloak-service.keycloak.svc'
+        - '*.keycloak-service.keycloak.svc.cluster.local'
+        - '*.keycloak-discovery'
+        - '*.keycloak-discovery.keycloak'
+        - '*.keycloak-discovery.keycloak.svc'
+        - '*.keycloak-discovery.keycloak.svc.cluster.local'
+      issuerRef:
+        name: selfsigned-issuer
+        kind: ClusterIssuer
+
+  - apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: keycloak
+      namespace: keycloak
+    spec:
+      parentRefs:
+        - name: local-gateway
+          namespace: tigera-gateway
+      hostnames:
+        - "keycloak.lab.dedushk.in"
+      rules:
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: keycloak-service
+              port: 8443
+              weight: 1
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+
+  - apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: keycloak-public
+      namespace: keycloak
+    spec:
+      parentRefs:
+        - name: public-gateway
+          namespace: tigera-gateway
+      hostnames:
+        - "keycloak.lab.dedushk.in"
+      rules:
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: keycloak-service
+              port: 8443
+              weight: 1
+          matches:
+            - path:
+                type: PathPrefix
+                value: /realms/lab
+            - path:
+                type: PathPrefix
+                value: /resources
+
+  - apiVersion: k8s.keycloak.org/v2alpha1
+    kind: Keycloak
+    metadata:
+      name: keycloak
+      namespace: keycloak
+    spec:
+      instances: 3
+      ingress: 
+        enabled: False
+      db:
+        vendor: postgres
+        database: keycloak
+        host: keycloak-database-cluster-rw.keycloak.svc.cluster.local
+        port: 5432
+        usernameSecret:
+          name: keycloak-database-cluster-app
+          key: username
+        passwordSecret:
+          name: keycloak-database-cluster-app
+          key: password
+      http:
+        tlsSecret: keycloak-tls-secret
+      hostname:
+        hostname: keycloak.lab.dedushk.in
+      image: keycloak/keycloak:26.5
+      startOptimized: false
+
+  - apiVersion: gateway.networking.k8s.io/v1alpha3
+    kind: BackendTLSPolicy
+    metadata:
+      name: keycloak-enable-backend-tls
+      namespace: keycloak
+    spec:
+      targetRefs:
+        - group: ''
+          kind: Service
+          name: keycloak-service
+          sectionName: https
+      validation:
+        caCertificateRefs:
+          - name: keycloak-tls-secret
+            group: ''
+            kind: Secret
+        hostname: keycloak-service.keycloak

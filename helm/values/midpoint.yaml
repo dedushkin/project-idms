@@ -1,0 +1,971 @@
+image:
+  repository: evolveum/midpoint
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to Chart appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Number of MidPoint replicas.
+# Setting >1 automatically enables clustered mode (MP_SET_midpoint_taskManager_clustered=true).
+replicaCount: 3
+
+init:
+  command: ["/bin/bash", "-c"]
+  args:
+    - >
+      /opt/midpoint/bin/midpoint.sh init-native &&
+      curl -v -L -o /opt/midpoint/var/icf-connectors/connector-keycloak-1.1.7-SNAPSHOT.jar
+      https://github.com/dedushkin/connector-keycloak/releases/download/v1.1.7-SNAPSHOT-kc26cr-ep4/connector-keycloak-1.1.7-SNAPSHOT.jar
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+  # Session affinity is enabled by default (required for clustered deployments)
+  sessionAffinity: ClientIP
+  sessionAffinityTimeoutSeconds: 10800
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations:
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-name: midpoint
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+  hosts:
+    - host: midpoint.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: midpoint-tls
+  #    hosts:
+  #      - midpoint.example.com
+
+# HTTPRoute configuration (Gateway API)
+httpRoute:
+  enabled: true
+  annotations: {}
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: local-gateway
+      namespace: tigera-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public-gateway
+      namespace: tigera-gateway
+  hostnames:
+    - midpoint.lab.dedushk.in
+  # Session persistence via Gateway API v1.1+ SessionPersistence (requires compatible gateway)
+  sessionPersistence:
+    enabled: true
+    sessionName: midpoint
+    type: Cookie       # Cookie or Header
+    absoluteTimeout: 48h
+    # idleTimeout: 1h
+
+# Resource limits and requests
+resources: {}
+  # limits:
+  #   cpu: 2000m
+  #   memory: 2Gi
+  # requests:
+  #   cpu: 500m
+  #   memory: 1Gi
+
+# Autoscaling configuration
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Container security context
+securityContext: {}
+  # allowPrivilegeEscalation: false
+  # capabilities:
+  #   drop:
+  #     - ALL
+
+# ServiceAccount configuration
+serviceAccount:
+  create: true
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+  name: ""
+
+# Node selection
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pod annotations and labels
+podAnnotations: {}
+podLabels: {}
+
+# Liveness probe
+livenessProbe:
+  enabled: true
+  httpGet: null
+  exec:
+    command:
+      - /bin/sh
+      - '-c'
+      - /usr/local/bin/healthcheck.sh
+  initialDelaySeconds: 30
+  periodSeconds: 60
+  timeoutSeconds: 30
+  failureThreshold: 3
+  successThreshold: 1
+
+# Readiness probe
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /midpoint/actuator/health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 1
+  failureThreshold: 3
+  successThreshold: 1
+
+# MidPoint application configuration
+midpoint:
+  # Initial administrator password.
+  # Required on first install. Must meet MidPoint password policy (min 5 chars).
+  adminPassword: "changeme"
+
+  # Use an existing secret for the admin password instead of creating one.
+  # The secret must contain the key defined in existingSecretKeys.adminPassword.
+  # The database password is sourced independently via postgresql.auth.existingSecret
+  # or externalDatabase.existingSecret.
+  existingSecret: ""
+  existingSecretKeys:
+    adminPassword: "admin-password"
+
+  # MidPoint home directory persistence (/opt/midpoint/var)
+  home:
+    persistence:
+      enabled: false
+      storageClass: ""
+      accessMode: ReadWriteOnce
+      size: 128Mi
+      existingClaim: ""  # only used when replicaCount=1
+
+  # Additional environment variables
+  extraEnv: []
+  #  - name: MP_SET_midpoint_keystore_keyStorePath
+  #    value: /opt/secret-volume/keystore.jceks
+
+  # Additional environment variables from secrets/configmaps
+  extraEnvFrom: []
+
+  # Additional volumes
+  extraVolumes:
+    # keystore
+    - name: keystore
+      secret:
+        secretName: midpoint-keystore
+    - name: icf-connectors-store
+      emptyDir: {}
+    # экстеншны
+    - name: extension
+      configMap:
+        name: midpoint-extension
+        items:
+          - key: "extension.xsd"
+            path: "extension.xsd"
+    # импорт объектов
+    - name: import
+      configMap:
+        name: midpoint-import-objects
+    - name: eg-https
+      secret:
+        secretName: eg-https
+
+  # Additional volume mounts
+  extraVolumeMounts:
+    - name: eg-https
+      mountPath: /opt/midpoint/var/certs
+      readOnly: false
+    - name: keystore
+      mountPath: /opt/midpoint/var/keystore.jceks
+      subPath: keystore.jceks
+      readOnly: false
+    - name: extension
+      mountPath: /opt/midpoint/var/schema/extension.xsd
+      subPath: extension.xsd
+      readOnly: true
+    - name: icf-connectors-store
+      mountPath: /opt/midpoint/var/icf-connectors
+    - name: import
+      mountPath: /opt/midpoint/var/post-initial-objects
+      readOnly: true
+
+# PostgreSQL dependency configuration
+postgresql:
+  enabled: false
+  auth:
+    username: midpoint
+    password: changeme
+    database: midpoint
+    existingSecret: ""
+    secretKeys:
+      adminPasswordKey: ""
+  primary:
+    persistence:
+      enabled: true
+      size: 5Gi
+
+# External database configuration (used when postgresql.enabled=false)
+externalDatabase:
+  host: "midpoint-database-cluster-rw.midpoint.svc.cluster.local"
+  port: 5432
+  database: midpoint
+  username: midpoint
+  password: ""
+  existingSecret: "midpoint-database-cluster-app"
+  existingSecretPasswordKey: "password"
+
+extraManifests:
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: midpoint-import-objects
+    namespace: midpoint
+  data:
+    001-security-policy.xml: |
+      <securityPolicy xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3" xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3" xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3" xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3" xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" oid="00000000-0000-0000-0000-000000000120" version="1">
+        <_metadata id="9">
+            <storage>
+                <createTimestamp>2026-04-28T08:36:01.232Z</createTimestamp>
+                <createChannel>http://midpoint.evolveum.com/xml/ns/public/common/channels-3#init</createChannel>
+            </storage>
+            <process>
+                <requestTimestamp>2026-04-28T08:36:01.216Z</requestTimestamp>
+            </process>
+        </_metadata>
+        <name>Default Security Policy</name>
+        <iteration>0</iteration>
+        <iterationToken/>
+        <authentication>
+            <modules>
+                <loginForm id="1">
+                    <identifier>loginForm</identifier>
+                </loginForm>
+                <httpBasic id="2">
+                    <identifier>httpBasic</identifier>
+                </httpBasic>
+                <oidc id="10">
+                    <identifier>gui-oidc</identifier>
+                    <client id="11">
+                        <registrationId>oidc-registration</registrationId>
+                        <clientId>midpoint</clientId>
+                        <clientSecret>
+                          <t:clearValue>changeme</t:clearValue> 
+                        </clientSecret>
+                        <clientAuthenticationMethod>clientSecretBasic</clientAuthenticationMethod>
+                        <nameOfUsernameAttribute>preferred_username</nameOfUsernameAttribute>
+                        <openIdProvider>
+                            <issuerUri>https://keycloak.lab.dedushk.in/realms/lab</issuerUri>
+                        </openIdProvider>
+                    </client>
+                </oidc>
+            </modules>
+            <sequence id="3">
+                <identifier>admin-gui-default</identifier>
+                <displayName>Default gui sequence</displayName>
+                <channel>
+                    <channelId>http://midpoint.evolveum.com/xml/ns/public/common/channels-3#user</channelId>
+                    <default>true</default>
+                    <urlSuffix>gui-default</urlSuffix>
+                </channel>
+                <module id="6">
+                    <identifier>loginForm</identifier>
+                    <order>1</order>
+                    <necessity>sufficient</necessity>
+                </module>
+            </sequence>
+            <sequence id="4">
+                <identifier>rest-default</identifier>
+                <channel>
+                    <channelId>http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest</channelId>
+                    <default>true</default>
+                    <urlSuffix>rest-default</urlSuffix>
+                </channel>
+                <module id="7">
+                    <identifier>httpBasic</identifier>
+                    <order>1</order>
+                    <necessity>sufficient</necessity>
+                </module>
+            </sequence>
+            <sequence id="5">
+                <identifier>actuator-default</identifier>
+                <channel>
+                    <channelId>http://midpoint.evolveum.com/xml/ns/public/common/channels-3#actuator</channelId>
+                    <default>true</default>
+                    <urlSuffix>actuator-default</urlSuffix>
+                </channel>
+                <module id="8">
+                    <identifier>httpBasic</identifier>
+                    <order>1</order>
+                    <necessity>sufficient</necessity>
+                </module>
+            </sequence>
+            <sequence id="12">
+                <identifier>gui-oidc</identifier>
+                <channel>
+                    <channelId>http://midpoint.evolveum.com/xml/ns/public/common/channels-3#user</channelId>
+                    <urlSuffix>gui-oidc</urlSuffix>
+                </channel>
+                <module id="13">
+                    <identifier>gui-oidc</identifier>
+                </module>
+            </sequence>
+            <ignoredLocalPath>/actuator/health</ignoredLocalPath>
+        </authentication>
+        <credentials>
+            <password>
+                <minOccurs>0</minOccurs>
+                <lockoutMaxFailedAttempts>3</lockoutMaxFailedAttempts>
+                <lockoutFailedAttemptsDuration>PT3M</lockoutFailedAttemptsDuration>
+                <lockoutDuration>PT15M</lockoutDuration>
+                <valuePolicyRef oid="00000000-0000-0000-0000-000000000003" relation="org:default" type="c:ValuePolicyType">
+                    <!-- Default Password Policy -->
+                </valuePolicyRef>
+            </password>
+        </credentials>
+      </securityPolicy>
+
+    002-keycloak-connector.xml: |
+      <resource
+        xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+        xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+        xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"
+        xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+        xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
+        xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
+        xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3">
+          <name>keycloak</name>
+          <connectorRef relation="org:default" type="c:ConnectorType">
+              <filter>
+                  <q:equal>
+                      <q:path>c:connectorType</q:path>
+                      <q:value>jp.openstandia.connector.keycloak.KeycloakConnector</q:value>
+                  </q:equal>
+              </filter>
+          </connectorRef>
+          <connectorConfiguration xmlns:icfc="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3">
+              <icfc:resultsHandlerConfiguration>
+                  <icfc:enableNormalizingResultsHandler>false</icfc:enableNormalizingResultsHandler>
+                  <icfc:enableFilteredResultsHandler>false</icfc:enableFilteredResultsHandler>
+                  <icfc:enableAttributesToGetSearchResultsHandler>false</icfc:enableAttributesToGetSearchResultsHandler>
+              </icfc:resultsHandlerConfiguration>
+              <icfc:configurationProperties xmlns:gen255="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/jp.openstandia.connector.connector-keycloak/jp.openstandia.connector.keycloak.KeycloakConnector">
+                  <gen255:serverUrl>https://keycloak-service.keycloak.svc.cluster.local:8443</gen255:serverUrl>
+                  <gen255:username>midpoint</gen255:username>
+                  <gen255:password>changeme</gen255:password>
+                  <gen255:clientId>admin-cli</gen255:clientId>
+                  <gen255:realmName>master</gen255:realmName>
+                  <gen255:targetRealmName>lab</gen255:targetRealmName>
+              </icfc:configurationProperties>
+          </connectorConfiguration>
+          <schemaHandling>
+              <objectType>
+                  <kind>account</kind>
+                  <intent>default</intent>
+                  <displayName>User</displayName>
+                  <default>true</default>
+                  <objectClass>ri:user</objectClass>
+                  <attribute>
+                      <c:ref>ri:username</c:ref>
+                      <displayName>Username</displayName>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <c:path>$focus/name</c:path>
+                          </source>
+                      </outbound>
+                  </attribute>
+                  <attribute>
+                      <c:ref>ri:email</c:ref>
+                      <displayName>Email</displayName>
+                      <matchingRule xmlns:mr="http://prism.evolveum.com/xml/ns/public/matching-rule-3">mr:stringIgnoreCase</matchingRule>
+                      <tolerant>false</tolerant>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <c:path>$focus/emailAddress</c:path>
+                          </source>
+                      </outbound>
+                  </attribute>
+                  <attribute>
+                      <c:ref>ri:lastName</c:ref>
+                      <tolerant>false</tolerant>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <c:path>$focus/familyName</c:path>
+                          </source>
+                      </outbound>
+                  </attribute>
+                  <attribute>
+                      <c:ref>ri:firstName</c:ref>
+                      <tolerant>false</tolerant>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <c:path>$focus/givenName</c:path>
+                          </source>
+                      </outbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:groups</ref>
+                      <tolerant>false</tolerant>
+                      <fetchStrategy>explicit</fetchStrategy>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>assignment</path>
+                          </source>
+                          <expression>
+                              <script>
+                                  <code>
+                                      import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType
+
+                                      if (assignment != null &amp;&amp; assignment.getTargetRef()?.getType()?.getLocalPart() == "OrgType") {
+                                          try {
+                                              def org = midpoint.getObject(OrgType.class, assignment.getTargetRef().getOid())
+                                              if (org != null) {
+                                                  return basic.getExtensionPropertyValue(org, "http://openstandia.jp/midpoint", "groupId")
+                                              }
+                                          } catch (Exception e) {
+                                              return null
+                                          }
+                                      }
+                                      return null
+                                  </code>
+                              </script>
+                          </expression>
+                      </outbound>
+                      <inbound>
+                          <strength>weak</strength>
+                          <target>
+                              <path>assignment</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:roles</ref>
+                      <tolerant>false</tolerant>
+                      <fetchStrategy>explicit</fetchStrategy>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>assignment</path>
+                          </source>
+                          <expression>
+                              <script>
+                                  <code>
+                                      import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType
+
+                                      if (assignment != null &amp;&amp; assignment.getTargetRef()?.getType()?.getLocalPart() == "RoleType") {
+                                          try {
+                                              def role = midpoint.getObject(RoleType.class, assignment.getTargetRef().getOid())
+                                              if (role != null) {
+                                                  return role.getName().getOrig()
+                                              }
+                                          } catch (Exception e) {
+                                              return null
+                                          }
+                                      }
+                                      return null
+                                  </code>
+                              </script>
+                          </expression>
+                      </outbound>
+                      <inbound>
+                          <strength>weak</strength>
+                          <target>
+                              <path>assignment</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <activation>
+                      <administrativeStatus>
+                          <outbound>
+                              <strength>strong</strength>
+                              <expression>
+                                  <asIs/>
+                              </expression>
+                          </outbound>
+                      </administrativeStatus>
+                  </activation>
+                  <credentials>
+                      <password>
+                          <outbound>
+                              <strength>strong</strength>
+                              <expression>
+                                <asIs/>
+                              </expression>
+                          </outbound>
+                      </password>
+                  </credentials>
+              </objectType>
+              <objectType>
+                  <kind>entitlement</kind>
+                  <intent>group</intent>
+                  <displayName>Group</displayName>
+                  <delineation>
+                      <objectClass>ri:group</objectClass>
+                  </delineation>
+                  <focus>
+                      <type>c:OrgType</type>
+                  </focus>
+                  <attribute>
+                      <ref>ri:groupId</ref>
+                      <inbound>
+                          <name>GroupId</name>
+                          <strength>strong</strength>
+                          <target>
+                            <path>extension/groupId</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:name</ref>
+                      <outbound>
+                          <name>DisplayName0</name>
+                          <strength>strong</strength>
+                          <source>
+                              <path>displayName</path>
+                          </source>
+                      </outbound>
+                      <inbound>
+                          <name>DisplayName</name>
+                          <strength>strong</strength>
+                          <target>
+                              <path>displayName</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:path</ref>
+                      <inbound>
+                          <name>Path</name>
+                          <strength>strong</strength>
+                          <target>
+                              <path>identifier</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:parentGroup</ref>
+                      <outbound>
+                          <name>ParentGroup</name>
+                          <strength>strong</strength>
+                          <source>
+                              <path>assignment</path>
+                          </source>
+                          <expression>
+                              <script>
+                                  <code>
+                                    import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType
+                                    
+                                    if (assignment.getTargetRef()?.getType()?.localPart.equals("OrgType")) {
+                                      try {
+                                        org = midpoint.getObject(OrgType, assignment.getTargetRef().getOid());
+                                        [basic.getExtensionPropertyValue(org, "http://openstandia.jp/midpoint", "groupId")];
+                                      } catch (Exception e) {
+                                        "";
+                                      }
+                                    } else {
+                                      "";
+                                    }
+                                  </code>
+                              </script>
+                          </expression>
+                      </outbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:groupRoles</ref>
+                      <tolerant>false</tolerant>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>assignment</path>
+                          </source>
+                          <expression>
+                              <script>
+                                  <code>
+                                      import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType
+
+                                      if (assignment != null &amp;&amp; assignment.getTargetRef()?.getType()?.getLocalPart() == "RoleType") {
+                                          try {
+                                              def role = midpoint.getObject(RoleType.class, assignment.getTargetRef().getOid())
+                                              if (role != null) {
+                                                  return role.getName().getOrig()
+                                              }
+                                          } catch (Exception e) {
+                                              return null
+                                          }
+                                      }
+                                      return null
+                                  </code>
+                              </script>
+                          </expression>
+                      </outbound>
+                  </attribute>
+                  <synchronization>
+                      <reaction>
+                          <situation>unmatched</situation>
+                          <actions>
+                              <addFocus/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>linked</situation>
+                          <actions>
+                              <synchronize/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>deleted</situation>
+                          <actions>
+                              <deleteFocus/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>unlinked</situation>
+                          <actions>
+                              <link/>
+                          </actions>
+                      </reaction>
+                  </synchronization>
+              </objectType>
+              <objectType>
+                  <kind>entitlement</kind>
+                  <intent>clientRole</intent>
+                  <displayName>Keycloak Client Role</displayName>
+                  <delineation>
+                      <objectClass>ri:clientRole</objectClass>
+                  </delineation>
+                  <focus>
+                      <type>c:RoleType</type>
+                  </focus>
+                  <attribute>
+                      <ref>ri:clientRoleId</ref>
+                      <displayName>Keycloak Client Role ID</displayName>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>extension/clientRoleId</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:name</ref>
+                      <displayName>Role Name</displayName>
+                      <matchingRule xmlns:gen84="http://prism.evolveum.com/xml/ns/public/matching-rule-3">gen84:stringIgnoreCase</matchingRule>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>name</path>
+                          </source>
+                      </outbound>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>name</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:description</ref>
+                      <displayName>Description</displayName>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>description</path>
+                          </source>
+                      </outbound>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>description</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <synchronization>
+                      <reaction>
+                          <situation>unmatched</situation>
+                          <actions>
+                              <addFocus/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>linked</situation>
+                          <actions>
+                              <synchronize/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>deleted</situation>
+                          <actions>
+                              <deleteFocus/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>unlinked</situation>
+                          <actions>
+                              <link/>
+                          </actions>
+                      </reaction>
+                  </synchronization>
+              </objectType>
+              <objectType>
+                  <kind>entitlement</kind>
+                  <intent>client</intent>
+                  <displayName>Keycloak Client</displayName>
+                  <delineation>
+                      <objectClass>ri:client</objectClass>
+                  </delineation>
+                  <focus>
+                      <type>c:ServiceType</type>
+                  </focus>
+                  <attribute>
+                      <ref>ri:clientUUID</ref>
+                      <displayName>Keycloak Client UUID</displayName>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>extension/clientUUID</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:clientId</ref>
+                      <displayName>Client ID</displayName>
+                      <matchingRule xmlns:gen379="http://prism.evolveum.com/xml/ns/public/matching-rule-3">gen379:stringIgnoreCase</matchingRule>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>name</path>
+                          </source>
+                      </outbound>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>name</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:name</ref>
+                      <displayName>Client Display Name</displayName>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>displayName</path>
+                          </source>
+                      </outbound>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>displayName</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:description</ref>
+                      <displayName>Description</displayName>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>description</path>
+                          </source>
+                      </outbound>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>description</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:protocol</ref>
+                      <displayName>Protocol</displayName>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>extension/protocol</path>
+                          </source>
+                          <expression>
+                              <script>
+                                  <code>
+                                  if (protocol != null) {
+                                      return protocol
+                                  } else {
+                                      return "openid-connect"
+                                  }
+                              </code>
+                              </script>
+                          </expression>
+                      </outbound>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>extension/protocol</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:secret</ref>
+                      <displayName>Client Secret</displayName>
+                      <outbound>
+                          <strength>strong</strength>
+                          <source>
+                              <path>extension/clientSecret</path>
+                          </source>
+                      </outbound>
+                      <inbound>
+                          <strength>weak</strength>
+                          <target>
+                              <path>extension/clientSecret</path>
+                          </target>
+                      </inbound>
+                  </attribute>
+                  <synchronization>
+                      <reaction>
+                          <situation>unmatched</situation>
+                          <actions>
+                              <addFocus/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>linked</situation>
+                          <actions>
+                              <synchronize/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>deleted</situation>
+                          <actions>
+                              <deleteFocus/>
+                          </actions>
+                      </reaction>
+                      <reaction>
+                          <situation>unlinked</situation>
+                          <actions>
+                              <link/>
+                          </actions>
+                      </reaction>
+                  </synchronization>
+              </objectType>
+          </schemaHandling>
+      </resource>
+
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: midpoint-extension
+    namespace: midpoint
+  data:
+    extension.xsd: |
+      <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                  xmlns:tns="http://openstandia.jp/midpoint"
+                  xmlns:a="http://prism.evolveum.com/xml/ns/public/annotation-3"
+                  xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+                  xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
+                  targetNamespace="http://openstandia.jp/midpoint"
+                  elementFormDefault="qualified">
+                  
+          <xsd:import namespace="http://prism.evolveum.com/xml/ns/public/types-3" />
+          <xsd:import namespace="http://midpoint.evolveum.com/xml/ns/public/common/common-3" />
+          
+          <xsd:complexType name="OrgExtensionType">
+              <xsd:annotation>
+                  <xsd:appinfo>
+                      <a:extension ref="c:OrgType"/>
+                  </xsd:appinfo>
+              </xsd:annotation>
+              <xsd:sequence>
+                  <xsd:element name="groupId" type="xsd:string">
+                      <xsd:annotation>
+                          <xsd:appinfo>
+                              <a:indexed>true</a:indexed>
+                              <a:displayName>Keycloak Group ID</a:displayName>
+                          </xsd:appinfo>
+                      </xsd:annotation>
+                  </xsd:element>
+              </xsd:sequence>
+          </xsd:complexType>
+
+          <xsd:complexType name="RoleExtensionType">
+              <xsd:annotation>
+                  <xsd:appinfo>
+                      <a:extension ref="c:RoleType"/>
+                  </xsd:appinfo>
+              </xsd:annotation>
+              <xsd:sequence>
+                  <xsd:element name="clientRoleId" type="xsd:string">
+                      <xsd:annotation>
+                          <xsd:appinfo>
+                              <a:indexed>true</a:indexed>
+                              <a:displayName>Keycloak Client Role ID</a:displayName>
+                          </xsd:appinfo>
+                      </xsd:annotation>
+                  </xsd:element>
+              </xsd:sequence>
+          </xsd:complexType>
+
+          <xsd:complexType name="ServiceExtensionType">
+              <xsd:annotation>
+                  <xsd:appinfo>
+                      <a:extension ref="c:ServiceType"/>
+                  </xsd:appinfo>
+              </xsd:annotation>
+              <xsd:sequence>
+                  <xsd:element name="clientUUID" type="xsd:string">
+                      <xsd:annotation>
+                          <xsd:appinfo>
+                              <a:indexed>true</a:indexed>
+                              <a:displayName>Keycloak Client UUID</a:displayName>
+                          </xsd:appinfo>
+                      </xsd:annotation>
+                  </xsd:element>
+
+                  <xsd:element name="protocol" type="xsd:string">
+                      <xsd:annotation>
+                          <xsd:appinfo>
+                              <a:indexed>true</a:indexed>
+                              <a:displayName>Protocol (openid-connect or saml)</a:displayName>
+                          </xsd:appinfo>
+                      </xsd:annotation>
+                  </xsd:element>
+
+                  <xsd:element name="clientSecret" type="t:ProtectedStringType">
+                      <xsd:annotation>
+                          <xsd:appinfo>
+                              <a:indexed>false</a:indexed>
+                              <a:displayName>Keycloak Client Secret</a:displayName>
+                          </xsd:appinfo>
+                      </xsd:annotation>
+                  </xsd:element>
+              </xsd:sequence>
+          </xsd:complexType>
+
+      </xsd:schema>

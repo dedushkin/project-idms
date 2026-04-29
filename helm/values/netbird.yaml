@@ -1,0 +1,521 @@
+dashboard:
+  affinity: {}
+  containerPort: 80
+  enabled: true
+  env:
+    AUTH_AUDIENCE: netbird-dashboard
+    AUTH_AUTHORITY: https://nb.lab.dedushk.in/oauth2
+    AUTH_CLIENT_ID: netbird-dashboard
+    AUTH_CLIENT_SECRET: "changeme"
+    AUTH_REDIRECT_URI: /nb-auth
+    AUTH_SILENT_REDIRECT_URI: /nb-silent-auth
+    AUTH_SUPPORTED_SCOPES: openid profile email groups
+    LETSENCRYPT_DOMAIN: none
+    LETSENCRYPT_EMAIL: ""
+    NETBIRD_MGMT_API_ENDPOINT: https://nb.lab.dedushk.in
+    NETBIRD_MGMT_GRPC_API_ENDPOINT: https://nb.lab.dedushk.in
+    NGINX_SSL_PORT: "443"
+    USE_AUTH0: "false"
+  envFromSecret: {}
+  envRaw: []
+  image:
+    pullPolicy: IfNotPresent
+    repository: netbirdio/dashboard
+    tag: v2.36.0
+  imagePullSecrets: []
+  ingress:
+    annotations: {}
+    className: ""
+    enabled: false
+    hosts:
+    - host: chart-example.local
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+    tls: []
+  lifecycle: {}
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 5
+    failureThreshold: 3
+    initialDelaySeconds: 15
+    timeoutSeconds: 3
+  nodeSelector: {}
+  podAnnotations: {}
+  podCommand:
+    args: []
+  podSecurityContext: {}
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  replicaCount: 1
+  resources: {}
+  securityContext: {}
+  service:
+    annotations: {}
+    externalIPs: []
+    name: http
+    port: 80
+    type: ClusterIP
+  serviceAccount:
+    annotations: {}
+    create: true
+    name: ""
+  tolerations:
+    - key: "node.kubernetes.io/unreachable"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 10
+    - key: "node.kubernetes.io/not-ready"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 10
+  volumeMounts: []
+  volumes: []
+extraManifests:
+- apiVersion: cert-manager.io/v1
+  kind: Certificate
+  metadata:
+    name: relay-tls
+    namespace: netbird
+  spec:
+    dnsNames:
+      - 'relay.lab.dedushk.in'
+    issuerRef:
+      group: cert-manager.io
+      kind: ClusterIssuer
+      name: letsencrypt-prod
+    secretName: rel
+- apiVersion: v1
+  data:
+    authSecret: changeme
+    encryptionKey: changeme
+    ownerEmail: changeme
+    ownerPassword: changeme
+  kind: Secret
+  metadata:
+    name: netbird-secret
+    namespace: netbird
+  type: Opaque
+- apiVersion: gateway.envoyproxy.io/v1alpha1
+  kind: BackendTrafficPolicy
+  metadata:
+    name: netbird-grpc-timeouts
+    namespace: netbird
+  spec:
+    targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: netbird-grpc
+    timeout:
+      http:
+        connectionIdleTimeout: 0s
+        requestTimeout: 0s
+      tcp:
+        connectTimeout: 15s
+- apiVersion: gateway.networking.k8s.io/v1
+  kind: GRPCRoute
+  metadata:
+    labels:
+      app.kubernetes.io/instance: netbird
+      app.kubernetes.io/name: netbird-management
+    name: netbird-grpc
+    namespace: netbird
+  spec:
+    hostnames:
+    - nb.lab.dedushk.in
+    parentRefs:
+    - name: local-gateway
+      namespace: tigera-gateway
+    - name: public-gateway
+      namespace: tigera-gateway
+    rules:
+    - backendRefs:
+      - name: netbird-management
+        port: 80
+      matches:
+      - method:
+          service: signalexchange.SignalExchange
+    - backendRefs:
+      - name: netbird-management
+        port: 80
+      matches:
+      - method:
+          service: management.ManagementService
+- apiVersion: gateway.networking.k8s.io/v1
+  kind: HTTPRoute
+  metadata:
+    name: netbird
+    namespace: netbird
+  spec:
+    hostnames:
+    - nb.lab.dedushk.in
+    parentRefs:
+    - name: local-gateway
+      namespace: tigera-gateway
+    - name: public-gateway
+      namespace: tigera-gateway
+    rules:
+    - backendRefs:
+      - group: ""
+        kind: Service
+        name: netbird-management
+        port: 80
+      matches:
+      - path:
+          type: PathPrefix
+          value: /api
+    #- backendRefs:
+    #  - group: ""
+    #    kind: Service
+    #    name: netbird-relay
+    #    port: 443
+    #  matches:
+    #  - path:
+    #      type: PathPrefix
+    #      value: /relay
+    - backendRefs:
+      - group: ""
+        kind: Service
+        name: netbird-management
+        port: 80
+      matches:
+      - path:
+          type: PathPrefix
+          value: /ws-proxy/
+    - backendRefs:
+      - group: ""
+        kind: Service
+        name: netbird-management
+        port: 80
+      matches:
+      - path:
+          type: PathPrefix
+          value: /oauth2
+    - backendRefs:
+      - group: ""
+        kind: Service
+        name: netbird-dashboard
+        port: 80
+      matches:
+      - path:
+          type: PathPrefix
+          value: /
+fullnameOverride: ""
+global:
+  namespace: ""
+management:
+  affinity: {}
+  configFilename: "config.yaml"
+  configmap: |
+    server:
+      listenAddress: ":80"
+      exposedAddress: "https://${NETBIRD_DOMAIN}:443"
+      # STUN server ports (defaults to [3478] if not specified; set 'stuns' to use external)
+      #stunPorts:
+      #  - 3478
+      metricsPort: 9090
+      healthcheckAddress: ":9000"
+      logLevel: "info"
+      logFile: "console"
+
+      dataDir: "/var/lib/netbird"
+      authSecret: ${NB_AUTH_SECRET}
+
+      auth:
+        issuer: "https://${NETBIRD_DOMAIN}/oauth2"
+        signKeyRefreshEnabled: true
+        dashboardRedirectURIs:
+          - "https://${NETBIRD_DOMAIN}/nb-auth"
+          - "https://${NETBIRD_DOMAIN}/nb-silent-auth"
+        cliRedirectURIs:
+          - "http://localhost:53000/"
+
+      reverseProxy:
+        trustedHTTPProxies:
+          - "0.0.0.0/0"
+
+      relays:
+        addresses:
+          - "rels://${NETBIRD_RELAY_DOMAIN}:443/relay"
+
+      stuns:
+        - uri: "stun:${NETBIRD_RELAY_DOMAIN}:3478"
+          proto: "udp"
+
+      store:
+        engine: "postgres"
+        dsn: "host=${POSTGRES_HOST} port=${POSTGRES_PORT} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} sslmode=disable"
+        encryptionKey: ${NB_ENCRYPTION_KEY}
+
+      authStore:
+        engine: "postgres"
+        dsn: "host=${POSTGRES_HOST} port=${POSTGRES_PORT} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB}-auth sslmode=disable"
+
+      activityStore:
+        engine: "postgres"
+        dsn: "host=${POSTGRES_HOST} port=${POSTGRES_PORT} user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB}-activity sslmode=disable"
+
+  containerPort: 80
+  deploymentAnnotations: {}
+  enabled: true
+  env:
+    NETBIRD_DOMAIN: nb.lab.dedushk.in
+    NETBIRD_RELAY_DOMAIN: relay.lab.dedushk.in
+    NB_ENABLE_STUN: "false"
+  envFromSecret:
+    NB_AUTH_SECRET: netbird-secret/authSecret
+    NB_ENCRYPTION_KEY: netbird-secret/encryptionKey
+    POSTGRES_HOST: netbird-database-cluster-app/host
+    POSTGRES_PORT: netbird-database-cluster-app/port
+    POSTGRES_USER: netbird-database-cluster-app/user
+    POSTGRES_PASSWORD: netbird-database-cluster-app/password
+    POSTGRES_DB: netbird-database-cluster-app/dbname
+  envRaw: []
+  grpcContainerPort: 33073
+  init:
+    enabled: true
+  image:
+    pullPolicy: IfNotPresent
+    repository: netbirdio/netbird-server
+    tag: "0.68.1"
+  imagePullSecrets: []
+  ingress:
+    annotations: {}
+    className: ""
+    enabled: false
+    hosts:
+    - host: example.com
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+    tls: []
+  ingressGrpc:
+    annotations: {}
+    className: ""
+    enabled: false
+    hosts:
+    - host: example.com
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+    tls: []
+  lifecycle: {}
+  livenessProbe:
+    failureThreshold: 3
+    initialDelaySeconds: 15
+    periodSeconds: 5
+    tcpSocket:
+      port: http
+    timeoutSeconds: 1
+  metrics:
+    enabled: false
+    port: 9090
+  nodeSelector: {}
+  persistentVolume:
+    accessModes:
+    - ReadWriteOnce
+    enabled: false
+    existingPVName: ""
+    size: 5Gi
+  podAnnotations: {}
+  podCommand:
+    args: []
+  podSecurityContext: {}
+  readinessProbe:
+    failureThreshold: 3
+    initialDelaySeconds: 15
+    periodSeconds: 5
+    tcpSocket:
+      port: http
+    timeoutSeconds: 1
+  replicaCount: 1
+  resources: {}
+  securityContext: {}
+  service:
+    annotations: {}
+    externalIPs: []
+    name: http
+    port: 80
+    type: ClusterIP
+  serviceAccount:
+    annotations: {}
+    create: true
+    name: ""
+  serviceGrpc:
+    annotations: {}
+    externalIPs: []
+    name: grpc
+    port: 33073
+    type: ClusterIP
+  stunPort: 3478
+  tolerations:
+    - key: "node.kubernetes.io/unreachable"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 10
+    - key: "node.kubernetes.io/not-ready"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 10
+  useBackwardsGrpcService: false
+  useEmbeddedStunService: false
+  serviceStun:
+    type: LoadBalancer
+    annotations:
+      metallb.io/address-pool: local-pool
+  volumeMounts: []
+  volumes: []
+metrics:
+  serviceMonitor:
+    annotations: {}
+    enabled: false
+    honorLabels: false
+    interval: ""
+    jobLabel: ""
+    labels: {}
+    metricRelabelings: []
+    namespace: ""
+    relabelings: []
+    scrapeTimeout: ""
+    selector: {}
+nameOverride: ""
+relay:
+  affinity:
+   podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - netbird-relay
+        topologyKey: "kubernetes.io/hostname"
+  containerPort: 443
+  deploymentAnnotations: {}
+  enabled: true
+  env:
+    NB_ENABLE_STUN: "true"
+    NB_EXPOSED_ADDRESS: "rels://relay.lab.dedushk.in:443"
+    NB_LISTEN_ADDRESS: "0.0.0.0:443"
+    NETBIRD_RELAY_PORT: "443"
+    NB_TLS_CERT_FILE: "/certs/tls.crt"
+    NB_TLS_KEY_FILE: "/certs/tls.key"
+  envFromSecret:
+    NB_AUTH_SECRET: netbird-secret/authSecret
+  envRaw: []
+  initContainerImage:
+    tag: "main"
+  image:
+    pullPolicy: IfNotPresent
+    repository: netbirdio/relay
+    tag: "0.68.1"
+  imagePullSecrets: []
+  ingress:
+    annotations: {}
+    className: ""
+    enabled: false
+    hosts:
+    - host: example.com
+      paths:
+      - path: /relay
+        pathType: ImplementationSpecific
+    tls: []
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    tcpSocket: null
+    httpGet:
+      scheme: HTTP
+      port: 9000
+      path: /health
+  logLevel: info
+  metrics:
+    enabled: false
+    port: 9090
+  nodeSelector: {}
+  podAnnotations: {}
+  podSecurityContext: {}
+  readinessProbe: {}
+  replicaCount: 3
+  resources: {}
+  securityContext: {}
+  stun:
+    enabled: true
+  service:
+    annotations:
+      metallb.io/address-pool: local-pool
+    externalIPs: []
+    port: 443
+    type: LoadBalancer
+  serviceAccount:
+    annotations: {}
+    create: true
+    name: ""
+  tolerations: []
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
+      readOnly: true
+  volumes:
+    - name: certs
+      secret:
+        secretName: rel
+signal:
+  affinity: {}
+  containerPort: 80
+  deploymentAnnotations: {}
+  enabled: false
+  image:
+    pullPolicy: IfNotPresent
+    repository: netbirdio/signal
+    tag: ""
+  imagePullSecrets: []
+  ingress:
+    annotations: {}
+    className: ""
+    enabled: false
+    hosts:
+    - host: example.com
+      paths:
+      - path: /signalexchange.SignalExchange
+        pathType: ImplementationSpecific
+    tls: []
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    tcpSocket:
+      port: grpc
+  logLevel: info
+  metrics:
+    enabled: false
+    port: 9090
+  nodeSelector: {}
+  podAnnotations: {}
+  podSecurityContext: {}
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    tcpSocket:
+      port: grpc
+  replicaCount: 1
+  resources: {}
+  securityContext: {}
+  service:
+    annotations: {}
+    externalIPs: []
+    name: grpc
+    port: 80
+    type: ClusterIP
+  serviceAccount:
+    annotations: {}
+    create: true
+    name: ""
+  tolerations: []
+  volumeMounts: []
+  volumes: []
