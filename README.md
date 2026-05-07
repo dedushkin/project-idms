@@ -316,3 +316,26 @@ helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts/
 
 helm upgrade --install --namespace velero my-velero vmware-tanzu/velero --version 12.0.0 -f ./helm/values/velero.yaml
 ```
+
+# 10. Восстановление
+
+## Шаг 1 - подготовка
+
+Выполнить действия из п. 1, 2
+
+## Шаг 2 - восстановление БД
+
+helm upgrade --install netbird-database --namespace netbird --create-namespace --version 0.6.0 cnpg/cluster -f ./helm/values/pg-restore/pg-netbird.yaml
+
+helm upgrade --install keycloak-database --namespace keycloak --create-namespace --version 0.6.0 cnpg/cluster -f ./helm/values/pg-restore/pg-keycloak.yaml
+
+helm upgrade --install midpoint-database --namespace midpoint --create-namespace --version 0.6.0 cnpg/cluster -f ./helm/values/pg-restore/pg-midpoint.yaml
+
+## Шаг 2 - восстановление кластера (Velero)
+
+Разворачиваем velero (см. п. 9)
+
+Находим самый свежий бэкап `velero backup get`
+
+Выполняем восстановление:
+`velero restore create my-restore --include-namespaces "netbird,keycloak,midpoint,netbird-operator" --include-resources="*" --include-cluster-resources=true --from-backup my-velero-mybackup-20260430000057`
