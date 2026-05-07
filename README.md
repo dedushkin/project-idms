@@ -331,7 +331,7 @@ helm upgrade --install keycloak-database --namespace keycloak --create-namespace
 
 helm upgrade --install midpoint-database --namespace midpoint --create-namespace --version 0.6.0 cnpg/cluster -f ./helm/values/pg-restore/pg-midpoint.yaml
 
-## Шаг 2 - восстановление кластера (Velero)
+## Шаг 3 - восстановление кластера (Velero)
 
 Разворачиваем velero (см. п. 9)
 
