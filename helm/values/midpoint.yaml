@@ -358,7 +358,8 @@ extraManifests:
         xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
         xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
         xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
-        xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3">
+        xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
+        oid="51848939-8b6f-4c65-bfee-4c22cd245a25">
           <name>keycloak</name>
           <connectorRef relation="org:default" type="c:ConnectorType">
               <filter>
@@ -399,6 +400,16 @@ extraManifests:
                               <c:path>$focus/name</c:path>
                           </source>
                       </outbound>
+                  </attribute>
+                  <attribute>
+                      <ref>ri:userId</ref>
+                      <displayName>Keycloak User ID</displayName>
+                      <inbound>
+                          <strength>strong</strength>
+                          <target>
+                              <path>extension/userId</path>
+                          </target>
+                      </inbound>
                   </attribute>
                   <attribute>
                       <c:ref>ri:email</c:ref>
@@ -896,6 +907,24 @@ extraManifests:
           <xsd:import namespace="http://prism.evolveum.com/xml/ns/public/types-3" />
           <xsd:import namespace="http://midpoint.evolveum.com/xml/ns/public/common/common-3" />
           
+          <xsd:complexType name="UserExtensionType">
+              <xsd:annotation>
+                  <xsd:appinfo>
+                      <a:extension ref="c:UserType"/>
+                  </xsd:appinfo>
+              </xsd:annotation>
+              <xsd:sequence>
+                  <xsd:element name="userId" type="xsd:string">
+                      <xsd:annotation>
+                          <xsd:appinfo>
+                              <a:indexed>true</a:indexed>
+                              <a:displayName>User ID</a:displayName>
+                          </xsd:appinfo>
+                      </xsd:annotation>
+                  </xsd:element>
+              </xsd:sequence>
+          </xsd:complexType>
+
           <xsd:complexType name="OrgExtensionType">
               <xsd:annotation>
                   <xsd:appinfo>
